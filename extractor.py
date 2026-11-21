@@ -3,6 +3,15 @@ import json
 import os
 import re
 
+from negation import is_negated
+
+# Checked in order: the first non-negated match wins (most severe first).
+SEVERITY_PATTERNS = [
+    ("Severe", r"\b(?:severe|severely|very bad|extreme|extremely|unbearable|worst)\b"),
+    ("Moderate", r"\b(?:moderate|moderately|quite bad|fairly bad)\b"),
+    ("Mild", r"\b(?:mild|mildly|slight|slightly|minor)\b"),
+]
+
 SCHEMA_KEYS = [
     "symptoms", "severity", "duration", "context",
     "negated_symptoms", "missing_information"
@@ -76,30 +85,31 @@ def _local_fallback(text):
     negated = []
     present = []
     for symptom in known:
-        # Detect simple local negation patterns; complex language may be missed.
-        patterns = [
-            rf"\bno\s+(?:signs of\s+)?{re.escape(symptom)}\b",
-            rf"\bnot\s+(?:having\s+)?{re.escape(symptom)}\b",
-            rf"\bdenies\s+{re.escape(symptom)}\b",
-            rf"\bwithout\s+{re.escape(symptom)}\b"
-        ]
-        if any(re.search(p, lower) for p in patterns):
+        # A symptom counts as present if ANY mention of it is not negated in its
+        # own clause (e.g. "no fever earlier, but now I have a fever" -> present).
+        mentions = [m.start() for m in re.finditer(rf"\b{re.escape(symptom)}\b", lower)]
+        if not mentions:
+            continue
+        if all(is_negated(lower, pos) for pos in mentions):
             negated.append(symptom)
-        elif symptom in lower:
+        else:
             present.append(symptom)
 
     result["symptoms"] = present
     result["negated_symptoms"] = negated
 
-    if re.search(r"\b(severe|very bad|extreme|unbearable)\b", lower):
-        result["severity"] = "Severe"
-    elif re.search(r"\b(moderate|quite bad)\b", lower):
-        result["severity"] = "Moderate"
-    elif re.search(r"\b(mild|slight|slightly)\b", lower):
-        result["severity"] = "Mild"
+    # Severity: ignore negated words such as "not severe" or "isn't very bad".
+    # If only negated words are found, severity stays None -> the case becomes
+    # "Uncertain" instead of being wrongly treated as severe or mild.
+    for level, pattern in SEVERITY_PATTERNS:
+        if any(not is_negated(lower, m.start()) for m in re.finditer(pattern, lower)):
+            result["severity"] = level
+            break
 
     duration_match = re.search(
-        r"\b(?:for|since)\s+((?:\d+\s*)?(?:minutes?|hours?|days?|weeks?|months?|years?|yesterday|today))\b",
+        r"\b(?:for|since)\s+((?:(?:\d+|a|an|one|two|three|four|five|six|seven|eight|nine|ten|"
+        r"a few|few|a couple of|couple of)\s*)?"
+        r"(?:minutes?|hours?|days?|weeks?|months?|years?|yesterday|today|last night|this morning))\b",
         lower
     )
     if duration_match:

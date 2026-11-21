@@ -51,7 +51,7 @@ If PowerShell blocks activation, use Command Prompt instead:
 
 1. Copy `.env.example` to `.env`.
 2. Put your key in `.env` as `GEMINI_API_KEY=your_key_here`.
-3. Install `python-dotenv` and load it at the top of `app.py`, or set the variable directly in your terminal before launching.
+3. Run the app. `app.py` loads `.env` automatically (via `python-dotenv`, included in `requirements.txt`).
 
 For the simplest environment-only setup in PowerShell:
 
@@ -61,7 +61,7 @@ $env:GEMINI_MODEL="gemini-2.5-flash"
 streamlit run app.py
 ```
 
-Do not commit `.env` or share your API key. The current code reads environment variables; it does not automatically load `.env`.
+Do not commit `.env` or share your API key. Environment variables set in the terminal also work.
 
 ## Run
 
@@ -78,11 +78,23 @@ healthguard_ai_phase1/
 ├── app.py
 ├── extractor.py
 ├── safety_rules.py
+├── negation.py          # shared clause-aware negation helper
+├── tests/
+│   ├── conftest.py
+│   └── test_cases.py    # 32 fictional regression tests
 ├── requirements.txt
 ├── .env.example
 ├── .gitignore
 └── README.md
 ```
+
+## Automated tests
+
+```powershell
+pytest -v
+```
+
+The suite runs 32 fictional cases through the local fallback (no API key needed) and checks the risk level, red flags, and present/denied symptoms. Run it after every change. Passing tests show the prototype behaves as designed; they do not show clinical safety.
 
 ## Suggested manual test cases
 

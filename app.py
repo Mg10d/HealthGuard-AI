@@ -2,6 +2,13 @@ import json
 from datetime import datetime
 import streamlit as st
 
+# Load GEMINI_API_KEY / GEMINI_MODEL from a local .env file if one exists.
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass  # python-dotenv not installed; environment variables still work
+
 from extractor import extract_symptoms
 from safety_rules import assess_case, CARE_LEVELS
 

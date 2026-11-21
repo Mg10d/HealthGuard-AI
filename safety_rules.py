@@ -5,6 +5,8 @@ qualified clinicians before any real-world deployment.
 """
 import re
 
+from negation import is_negated
+
 CARE_LEVELS = ("Low-risk", "Moderate-risk", "High-risk", "Uncertain")
 
 # Conservative example triggers only. This list is intentionally incomplete.
@@ -32,17 +34,16 @@ RED_FLAG_RULES = [
     ]),
 ]
 
-NEGATION_PATTERNS = [
-    r"\bno\b", r"\bnot\b", r"\bdenies\b", r"\bwithout\b", r"\bnever\b"
-]
+def _is_negated_near(text, match_start):
+    """Clause-aware negation check (see negation.py); not clinical NLP.
 
-def _is_negated_near(text, match_start, window=45):
-    """Simple negation heuristic to reduce obvious false positives; not clinical NLP."""
-    prefix = text[max(0, match_start - window):match_start].lower()
-    suffix = text[match_start:match_start + 18].lower()
-    # Only a basic heuristic. It can fail on complex wording and multiple clauses.
-    return any(re.search(pattern + r"[^.!?]{0,35}$", prefix) for pattern in NEGATION_PATTERNS) or \
-           bool(re.match(r"\s*(is absent|not present)", suffix))
+    The old version looked 45 characters back across clause boundaries, so
+    "I'm not sure, but I have chest pain and shortness of breath" suppressed the
+    red flag. Negation now only applies inside the same clause.
+    """
+    suffix = text[match_start:match_start + 40].lower()
+    return is_negated(text, match_start) or \
+           bool(re.match(r"[^.!?,;]*\b(is absent|not present)\b", suffix))
 
 def find_red_flags(text):
     found = []
@@ -82,6 +83,10 @@ def assess_case(original_text, extracted, age_group="Not provided"):
         reasons.append("A matching red-flag rule takes priority over any model score.")
         human_review = True
     else:
+        # "Unclear" severity is treated the same as missing. Previously it fell
+        # through to the final branch and was labelled Low-risk.
+        if severity == "unclear":
+            severity = ""
         # Conservative uncertainty: limited extraction or missing core information.
         if not symptoms or not severity or not duration:
             risk = "Uncertain"
